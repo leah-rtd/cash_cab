@@ -15,7 +15,7 @@ st.set_page_config(page_title = "need a wagon?",
 
 st.title(":taxi: need a wagon?:taxi:")
 
-
+@st.cache_data(ttl=3600)
 def get_lat_long(address):
     """
     Retrieve latitude and longitude from an address using Nomatim
@@ -28,6 +28,40 @@ def get_lat_long(address):
     return response[0]['lat'], response[0]['lon']
 
 
+@st.cache_data(ttl=600)
+def get_weather_data():
+    """
+    Get Current Weather for NYC
+    """
+    weather_url = "https://api.weatherapi.com/v1/current.json"
+    params = {"key": st.secrets['weather'],
+              "q": "New York",
+              "aqi": "no"} ##air quality index
+
+    response_weather = requests.get(weather_url, params=params).json()
+
+    return response_weather
+
+@st.cache_data(ttl=1800)
+def get_fare_prediction(pickup_datetime, pickup_longitude, pickup_latitude,
+                       dropoff_longitude, dropoff_latitude, passenger_count):
+    """
+    Get fare prediction from our API
+    """
+    url = "https://taxifare.lewagon.ai/predict"
+    params = {"pickup_datetime": pickup_datetime,
+            "pickup_longitude": pickup_longitude,
+            "pickup_latitude": pickup_latitude,
+            "dropoff_longitude":dropoff_longitude,
+            "dropoff_latitude": dropoff_latitude,
+            "passenger_count": passenger_count}
+    response = requests.get(url, params=params).json()
+    return response['fare']
+
+
+
+
+
 pickup_latitude = None
 pickup_longitude = None
 dropoff_latitude = None
@@ -37,20 +71,18 @@ col1, col2= st.columns(2)
 with col1:
     ## Current Weather Display
     st.markdown("### Current NYC Weather")
-    weather_url = "https://api.weatherapi.com/v1/current.json"
-    params = {"key": st.secrets['weather'],
-              "q": "New York",
-              "aqi": "no"} ##air quality index
-    response_weather = requests.get(weather_url, params=params).json()
-    icon = "https:"+response_weather['current']['condition']['icon']
-    temp_c = response_weather['current']['temp_c']
-    temp_f = response_weather['current']['temp_f']
+
+    response_weather = get_weather_data()
+
     col1_bis, col2_bis, col3_bis = st.columns(3)
     with col1_bis:
+        temp_c = response_weather['current']['temp_c']
+        temp_f = response_weather['current']['temp_f']
         st.markdown(f"#### {temp_c}°C")
         st.markdown(f"#### {temp_f}°F")
 
     with col2_bis:
+        icon = "https:"+response_weather['current']['condition']['icon']
         st.image(icon)
         st.text(response_weather['current']['condition']['text'])
 
@@ -75,30 +107,25 @@ with col1:
                     step = 1, placeholder=1)
 
 
-    url = "https://taxifare.lewagon.ai/predict"
+
 
     pickup_datetime = datetime.datetime.today()
     pickup_yesterday = datetime.datetime.today() - datetime.timedelta(days = 1)
     if pickup_longitude != None and dropoff_longitude != None:
-        params_now = {"pickup_datetime": pickup_datetime,
-            "pickup_longitude": pickup_longitude,
-            "pickup_latitude": pickup_latitude,
-            "dropoff_longitude":dropoff_longitude,
-            "dropoff_latitude": dropoff_latitude,
-            "passenger_count": passenger_count}
-        response_now = requests.get(url=url, params = params_now).json()
-        fare_now = round(response_now['fare'],2)
+
+
+        fare_now = round(get_fare_prediction(pickup_datetime=pickup_datetime,
+                        pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
+                        dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
+                        passenger_count=passenger_count), 2)
         st.markdown(f"#### Predicted fare: {fare_now}$")
-        params_yesterday = {"pickup_datetime": pickup_yesterday,
-            "pickup_longitude": pickup_longitude,
-            "pickup_latitude": pickup_latitude,
-            "dropoff_longitude":dropoff_longitude,
-            "dropoff_latitude": dropoff_latitude,
-            "passenger_count": passenger_count}
 
         if st.button("Compare with yesterday's price ?"):
-            response_yesterday = requests.get(url=url, params = params_yesterday).json()
-            fare_yesterday = round(response_yesterday['fare'], 2)
+
+            fare_yesterday = round(get_fare_prediction(pickup_datetime=pickup_yesterday,
+                        pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
+                        dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
+                        passenger_count=passenger_count), 2)
             if fare_yesterday < fare_now:
                 st.markdown(f"That's {round(fare_now - fare_yesterday,2)}$ more expensive than yesterday!")
             else:
@@ -124,42 +151,3 @@ with col2:
         folium.PolyLine(locations= coordinates).add_to(m)
 
     folium_static(m)
-
-
-
-
-
-
-
-st.markdown(
-    f"""
-    <style>
-        .footer {{
-                        position: fixed;
-            bottom: 10px;
-            right: 20px;  /* Moves it slightly left so it's visible */
-            background-color: #f1f1f1;
-            padding: 10px 20px;
-            font-size: 14px;
-            color: black;
-            border-radius: 10px;
-            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
-
-        }}
-        .footer img {{
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            vertical-align: middle;
-            margin-right: 5px;
-        }}
-    </style>
-    <div class="footer">
-        Designed by
-        <a href="https://github.com/leah-rtd" target="_blank">
-            <img src="https://github.com/leah-rtd.png" alt="GitHub Profile Picture">
-        </a>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
