@@ -15,6 +15,7 @@ st.set_page_config(page_title = "need a wagon?",
 
 st.title(":taxi: need a wagon?:taxi:")
 
+
 def get_lat_long(address):
     """
     Retrieve latitude and longitude from an address using Nomatim
@@ -31,66 +32,102 @@ pickup_latitude = None
 pickup_longitude = None
 dropoff_latitude = None
 dropoff_longitude = None
-col1, col2, col3 = st.columns(3)
+
+col1, col2= st.columns(2)
 with col1:
+    ## Current Weather Display
+    st.markdown("### Current NYC Weather")
+    weather_url = "https://api.weatherapi.com/v1/current.json"
+    params = {"key": st.secrets['weather'],
+              "q": "New York",
+              "aqi": "no"} ##air quality index
+    response_weather = requests.get(weather_url, params=params).json()
+    icon = "https:"+response_weather['current']['condition']['icon']
+    temp_c = response_weather['current']['temp_c']
+    temp_f = response_weather['current']['temp_f']
+    col1_bis, col2_bis, col3_bis = st.columns(3)
+    with col1_bis:
+        st.markdown(f"#### {temp_c}°C")
+        st.markdown(f"#### {temp_f}°F")
+
+    with col2_bis:
+        st.image(icon)
+        st.text(response_weather['current']['condition']['text'])
+
+    with col3_bis:
+        wind_mph = response_weather['current']['wind_mph']
+        precip_in = response_weather['current']['precip_in']
+        uv_index = round(response_weather['current']['uv'])
+        st.text(f"Wind: {wind_mph} m/h")
+        st.text(f"Precipitation: {precip_in} inches")
+        st.text(f"UV Index: {uv_index}")
+
+
+    ## Fare display
+    st.markdown("### Fare Prediction")
     pickup = st.text_input("Where are you ?", placeholder="Manhattan")
     if pickup:
         pickup_latitude, pickup_longitude = get_lat_long(pickup)
-
-
-with col2:
     dropoff = st.text_input("Where do you want to go ?", placeholder="Brooklyn")
     if dropoff:
         dropoff_latitude, dropoff_longitude = get_lat_long(dropoff)
-
-
-with col3:
     passenger_count = st.number_input("How many are you ?", min_value = 1, max_value = 5,
                     step = 1, placeholder=1)
 
-url = "https://taxifare.lewagon.ai/predict"
 
-pickup_datetime = datetime.datetime.today()
-if pickup_longitude != None and dropoff_longitude != None:
-    params = {"pickup_datetime": pickup_datetime,
-          "pickup_longitude": pickup_longitude,
-          "pickup_latitude": pickup_latitude,
-          "dropoff_longitude":dropoff_longitude,
-          "dropoff_latitude": dropoff_latitude,
-          "passenger_count": passenger_count}
-    response = requests.get(url=url, params = params).json()
-    fare = round(response['fare'],2)
-    st.markdown(f"### {fare}$")
+    url = "https://taxifare.lewagon.ai/predict"
 
-m = folium.Map(location=[ 40.708116, -73.957070], zoom_start=11)
+    pickup_datetime = datetime.datetime.today()
+    pickup_yesterday = datetime.datetime.today() - datetime.timedelta(days = 1)
+    if pickup_longitude != None and dropoff_longitude != None:
+        params_now = {"pickup_datetime": pickup_datetime,
+            "pickup_longitude": pickup_longitude,
+            "pickup_latitude": pickup_latitude,
+            "dropoff_longitude":dropoff_longitude,
+            "dropoff_latitude": dropoff_latitude,
+            "passenger_count": passenger_count}
+        response_now = requests.get(url=url, params = params_now).json()
+        fare_now = round(response_now['fare'],2)
+        st.markdown(f"#### Predicted fare: {fare_now}$")
+        params_yesterday = {"pickup_datetime": pickup_yesterday,
+            "pickup_longitude": pickup_longitude,
+            "pickup_latitude": pickup_latitude,
+            "dropoff_longitude":dropoff_longitude,
+            "dropoff_latitude": dropoff_latitude,
+            "passenger_count": passenger_count}
 
-# Add markers if valid coordinates are available
-if pickup_latitude and pickup_longitude:
-    folium.Marker([pickup_latitude, pickup_longitude], popup="Pickup", icon=folium.Icon(color="green")).add_to(m)
-
-if dropoff_latitude and dropoff_longitude:
-    folium.Marker([dropoff_latitude, dropoff_longitude], popup="Dropoff", icon=folium.Icon(color="red")).add_to(m)
-
-
-if pickup_latitude and pickup_longitude and dropoff_latitude and dropoff_longitude:
-    coordinates = [[float(pickup_latitude), float(pickup_longitude)],
-                   [float(dropoff_latitude), float(dropoff_longitude)]]
-    folium.PolyLine(locations= coordinates).add_to(m)
+        if st.button("Compare with yesterday's price ?"):
+            response_yesterday = requests.get(url=url, params = params_yesterday).json()
+            fare_yesterday = round(response_yesterday['fare'], 2)
+            if fare_yesterday < fare_now:
+                st.markdown(f"That's {round(fare_now - fare_yesterday,2)}$ more expensive than yesterday!")
+            else:
+                st.markdown(f"That's {round(fare_now - fare_yesterday,2)}$ less expensive than yesterday!")
 
 
-# Display Map
-st.markdown(
-    """
-    <style>
-        iframe {
-            width: 90vw !important;  /* Set map width */
-            height: 70vh !important; /* Set map height */
-        }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-folium_static(m)
+
+
+with col2:
+    m = folium.Map(location=[ 40.708116, -73.957070], zoom_start=11)
+
+    # Add markers if valid coordinates are available
+    if pickup_latitude and pickup_longitude:
+        folium.Marker([pickup_latitude, pickup_longitude], popup="Pickup", icon=folium.Icon(color="green")).add_to(m)
+
+    if dropoff_latitude and dropoff_longitude:
+        folium.Marker([dropoff_latitude, dropoff_longitude], popup="Dropoff", icon=folium.Icon(color="red")).add_to(m)
+
+
+    if pickup_latitude and pickup_longitude and dropoff_latitude and dropoff_longitude:
+        coordinates = [[float(pickup_latitude), float(pickup_longitude)],
+                    [float(dropoff_latitude), float(dropoff_longitude)]]
+        folium.PolyLine(locations= coordinates).add_to(m)
+
+    folium_static(m)
+
+
+
+
 
 
 
