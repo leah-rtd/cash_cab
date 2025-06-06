@@ -5,6 +5,9 @@ import folium
 from streamlit_folium import folium_static
 import datetime
 
+
+
+
 ## Setting page configuration
 st.set_page_config(page_title = "need a wagon?",
                    page_icon=":taxi:",
