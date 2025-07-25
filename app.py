@@ -4,7 +4,10 @@ import pandas as pd
 import folium
 from streamlit_folium import folium_static
 import datetime
-
+import plotly.graph_objects as go
+import time
+import numpy as np
+from zoneinfo import ZoneInfo
 
 
 
@@ -61,6 +64,19 @@ def get_fare_prediction(pickup_datetime, pickup_longitude, pickup_latitude,
     response = requests.get(url, params=params).json()
     return response['fare']
 
+@st.cache_data(ttl=1800)
+def get_30_day_fare_prediction(pickup_datetime, pickup_longitude, pickup_latitude,
+                       dropoff_longitude, dropoff_latitude, passenger_count):
+    pickups = [(datetime.datetime.today() - datetime.timedelta(days = day)) for day in range(31)]
+    res = {"Dates": [], "Fare Amount ($)": []}
+    for pickup in pickups:
+        res['Dates'].append(pickup.strftime(format = "%d-%m-%Y"))
+        res['Fare Amount ($)'].append(get_fare_prediction(pickup, pickup_longitude, pickup_latitude,
+                                               dropoff_longitude, dropoff_latitude,
+                                               passenger_count))
+        time.sleep(np.random.uniform(0,0.5))
+
+    return pd.DataFrame(res).set_index("Dates").sort_index()
 
 
 
@@ -69,71 +85,58 @@ pickup_latitude = None
 pickup_longitude = None
 dropoff_latitude = None
 dropoff_longitude = None
-
+fare_now = None
 col1, col2= st.columns(2)
 with col1:
-    ## Current Weather Display
+
+        ## Current Weather Display
     st.markdown("### Current NYC Weather")
+    with st.container(border = True):
+        response_weather = get_weather_data()
 
-    response_weather = get_weather_data()
+        col1_bis, col2_bis, col3_bis = st.columns(3)
+        with col1_bis:
+            temp_c = response_weather['current']['temp_c']
+            temp_f = response_weather['current']['temp_f']
+            st.markdown(f"#### {temp_c}°C")
+            st.markdown(f"#### {temp_f}°F")
 
-    col1_bis, col2_bis, col3_bis = st.columns(3)
-    with col1_bis:
-        temp_c = response_weather['current']['temp_c']
-        temp_f = response_weather['current']['temp_f']
-        st.markdown(f"#### {temp_c}°C")
-        st.markdown(f"#### {temp_f}°F")
+        with col2_bis:
+            icon = "https:"+response_weather['current']['condition']['icon']
+            st.image(icon)
+            st.text(response_weather['current']['condition']['text'])
 
-    with col2_bis:
-        icon = "https:"+response_weather['current']['condition']['icon']
-        st.image(icon)
-        st.text(response_weather['current']['condition']['text'])
-
-    with col3_bis:
-        wind_mph = response_weather['current']['wind_mph']
-        precip_in = response_weather['current']['precip_in']
-        uv_index = round(response_weather['current']['uv'])
-        st.text(f"Wind: {wind_mph} m/h")
-        st.text(f"Precipitation: {precip_in} inches")
-        st.text(f"UV Index: {uv_index}")
+        with col3_bis:
+            wind_mph = response_weather['current']['wind_mph']
+            precip_in = response_weather['current']['precip_in']
+            uv_index = round(response_weather['current']['uv'])
+            st.text(f"Wind: {wind_mph} m/h")
+            st.text(f"Precipitation: {precip_in} inches")
+            st.text(f"UV Index: {uv_index}")
 
 
     ## Fare display
     st.markdown("### Fare Prediction")
-    pickup = st.text_input("Where are you ?", placeholder="Manhattan")
-    if pickup:
-        pickup_latitude, pickup_longitude = get_lat_long(pickup)
-    dropoff = st.text_input("Where do you want to go ?", placeholder="Brooklyn")
-    if dropoff:
-        dropoff_latitude, dropoff_longitude = get_lat_long(dropoff)
-    passenger_count = st.number_input("How many are you ?", min_value = 1, max_value = 5,
-                    step = 1, placeholder=1)
+    with st.container(border = True):
+        pickup = st.text_input("Where are you ?", placeholder="Manhattan")
+        if pickup:
+            pickup_latitude, pickup_longitude = get_lat_long(pickup)
+        dropoff = st.text_input("Where do you want to go ?", placeholder="Brooklyn")
+        if dropoff:
+            dropoff_latitude, dropoff_longitude = get_lat_long(dropoff)
+        passenger_count = st.number_input("How many are you ?", min_value = 1, max_value = 5,
+                        step = 1, placeholder=1)
 
 
 
 
-    pickup_datetime = datetime.datetime.today()
-    pickup_yesterday = datetime.datetime.today() - datetime.timedelta(days = 1)
-    if pickup_longitude != None and dropoff_longitude != None:
-
-
-        fare_now = round(get_fare_prediction(pickup_datetime=pickup_datetime,
-                        pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
-                        dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
-                        passenger_count=passenger_count), 2)
-        st.markdown(f"#### Predicted fare: {fare_now}$")
-
-        if st.button("Compare with yesterday's price ?"):
-
-            fare_yesterday = round(get_fare_prediction(pickup_datetime=pickup_yesterday,
-                        pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
-                        dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
-                        passenger_count=passenger_count), 2)
-            if fare_yesterday < fare_now:
-                st.markdown(f"That's {round(fare_now - fare_yesterday,2)}$ more expensive than yesterday!")
-            else:
-                st.markdown(f"That's {round(fare_now - fare_yesterday,2)}$ less expensive than yesterday!")
-
+        pickup_datetime = datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
+        if pickup_longitude != None and dropoff_longitude != None:
+            fare_now = round(get_fare_prediction(pickup_datetime=pickup_datetime,
+                            pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
+                            dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
+                            passenger_count=passenger_count), 2)
+            st.markdown(f"#### Predicted fare: {fare_now}$")
 
 
 
@@ -154,3 +157,37 @@ with col2:
         folium.PolyLine(locations= coordinates).add_to(m)
 
     folium_static(m)
+
+if fare_now != None:
+    st.markdown(f'#### 30 Day Price Comparison for rides at {datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M %p")}')
+    with st.spinner("Getting Amazing Predictions"):
+        if "fares" not in st.session_state:
+            st.session_state.fares = get_30_day_fare_prediction(pickup_datetime=pickup_datetime,
+                            pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
+                            dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
+                            passenger_count=passenger_count)
+        df_fares = st.session_state.fares
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x = df_fares.index,
+            y = df_fares['Fare Amount ($)'],
+            mode = 'lines+markers',
+            marker = dict(size = 8, color = "#ffc25a"),
+            line = dict(color = "#6AE7FF", width = 2),
+            showlegend=False
+        ))
+        ## ymin fill
+        min_fill = df_fares['Fare Amount ($)'].min()
+
+        fig.add_trace(go.Scatter(
+            x = df_fares.index,
+            y = [min_fill] * len(df_fares),
+            mode = "lines",
+            fill= "tonexty",
+            line = dict(color = "lightblue", width = 0),
+            showlegend= False,
+            hoverinfo="skip"
+        ))
+        fig.update_layout(xaxis=dict(showgrid = False, tickangle=45),
+                          yaxis= dict(showgrid=True, gridcolor="lightgrey"))
+        st.plotly_chart(fig)
