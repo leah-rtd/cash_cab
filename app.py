@@ -86,6 +86,7 @@ pickup_longitude = None
 dropoff_latitude = None
 dropoff_longitude = None
 fare_now = None
+
 col1, col2= st.columns(2)
 with col1:
 
@@ -130,14 +131,14 @@ with col1:
 
 
 
-        pickup_datetime = datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
         if pickup_longitude != None and dropoff_longitude != None:
-            fare_now = round(get_fare_prediction(pickup_datetime=pickup_datetime,
-                            pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
-                            dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
-                            passenger_count=passenger_count), 2)
-            st.markdown(f"#### Predicted fare: {fare_now}$")
-
+            pickup_datetime = datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
+            if st.button("Get Fare"):
+                fare_now = round(get_fare_prediction(pickup_datetime=pickup_datetime,
+                                pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
+                                dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
+                                passenger_count=passenger_count), 2)
+                st.markdown(f"#### Predicted fare: {fare_now}$")
 
 
 with col2:
@@ -158,17 +159,17 @@ with col2:
 
     st_data = st_folium(m)
 
+st.markdown(f'#### 30 Day Price Comparison for rides at {datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M %p")}')
 if fare_now != None:
-    st.markdown(f'#### 30 Day Price Comparison for rides at {datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M %p")}')
-    with st.spinner("Getting Amazing Predictions"):
-        if "fares" not in st.session_state:
-            st.session_state.fares = get_30_day_fare_prediction(pickup_datetime=pickup_datetime,
+
+
+
+    df_fares = get_30_day_fare_prediction(pickup_datetime=pickup_datetime,
                             pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
                             dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
                             passenger_count=passenger_count)
-        df_fares = st.session_state.fares
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
             x = df_fares.index,
             y = df_fares['Fare Amount ($)'],
             mode = 'lines+markers',
@@ -177,9 +178,9 @@ if fare_now != None:
             showlegend=False
         ))
         ## ymin fill
-        min_fill = df_fares['Fare Amount ($)'].min()
+    min_fill = df_fares['Fare Amount ($)'].min()
 
-        fig.add_trace(go.Scatter(
+    fig.add_trace(go.Scatter(
             x = df_fares.index,
             y = [min_fill] * len(df_fares),
             mode = "lines",
@@ -188,6 +189,6 @@ if fare_now != None:
             showlegend= False,
             hoverinfo="skip"
         ))
-        fig.update_layout(xaxis=dict(showgrid = False, tickangle=45),
+    fig.update_layout(xaxis=dict(showgrid = False, tickangle=45),
                           yaxis= dict(showgrid=True, gridcolor="lightgrey"))
-        st.plotly_chart(fig)
+    st.plotly_chart(fig)
