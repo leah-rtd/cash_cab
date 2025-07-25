@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import folium
-from streamlit_folium import folium_static
+from streamlit_folium import st_folium
 import datetime
 import plotly.graph_objects as go
 import time
@@ -156,7 +156,7 @@ with col2:
                     [float(dropoff_latitude), float(dropoff_longitude)]]
         folium.PolyLine(locations= coordinates).add_to(m)
 
-    folium_static(m)
+    st_data = st_folium(m)
 
 if fare_now != None:
     st.markdown(f'#### 30 Day Price Comparison for rides at {datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M %p")}')
