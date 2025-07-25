@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import time
 import numpy as np
 from zoneinfo import ZoneInfo
+import pydeck as pdk
 
 
 
@@ -80,7 +81,11 @@ def get_30_day_fare_prediction(pickup_datetime, pickup_longitude, pickup_latitud
 
 
 
-
+# Initialize session state variables
+if 'pickup' not in st.session_state:
+    st.session_state['pickup'] = None
+if 'dropoff' not in st.session_state:
+    st.session_state['dropoff'] = None
 pickup_latitude = None
 pickup_longitude = None
 dropoff_latitude = None
@@ -122,9 +127,11 @@ with col1:
         pickup = st.text_input("Where are you ?", placeholder="Manhattan")
         if pickup:
             pickup_latitude, pickup_longitude = get_lat_long(pickup)
+            st.session_state['pickup'] = (pickup_latitude, pickup_longitude)
         dropoff = st.text_input("Where do you want to go ?", placeholder="Brooklyn")
         if dropoff:
             dropoff_latitude, dropoff_longitude = get_lat_long(dropoff)
+            st.session_state['dropoff'] = (dropoff_latitude, dropoff_longitude)
         passenger_count = st.number_input("How many are you ?", min_value = 1, max_value = 5,
                         step = 1, placeholder=1)
 
@@ -142,22 +149,71 @@ with col1:
 
 
 with col2:
-    m = folium.Map(location=[ 40.708116, -73.957070], zoom_start=11)
+    # Build points data dynamically
+    points = []
+    if st.session_state['pickup']:
+        points.append({
+            "lat": float(st.session_state['pickup'][0]),
+            "lon": float(st.session_state['pickup'][1]),
+            "type": "Pickup"
+        })
 
-    # Add markers if valid coordinates are available
-    if pickup_latitude and pickup_longitude:
-        folium.Marker([pickup_latitude, pickup_longitude], popup="Pickup", icon=folium.Icon(color="green")).add_to(m)
+    if st.session_state['dropoff']:
+        points.append({
+            "lat": float(st.session_state['dropoff'][0]),
+            "lon": float(st.session_state['dropoff'][1]),
+            "type": "Dropoff"
+        })
 
-    if dropoff_latitude and dropoff_longitude:
-        folium.Marker([dropoff_latitude, dropoff_longitude], popup="Dropoff", icon=folium.Icon(color="red")).add_to(m)
+    points_data = pd.DataFrame(points)
 
+    # Build Layers
+    layers = []
+    if not points_data.empty:
+        point_layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=points_data,
+            get_position='[lon, lat]',
+            get_color='[255, 0, 0, 255]',
+            get_radius=200,
+            pickable=True
+        )
+        layers.append(point_layer)
 
-    if pickup_latitude and pickup_longitude and dropoff_latitude and dropoff_longitude:
-        coordinates = [[float(pickup_latitude), float(pickup_longitude)],
-                    [float(dropoff_latitude), float(dropoff_longitude)]]
-        folium.PolyLine(locations= coordinates).add_to(m)
+    # Add line if both pickup & dropoff are present
+    if st.session_state['pickup'] and st.session_state['dropoff']:
+        line_data = pd.DataFrame([{
+            "path": [
+                [st.session_state['pickup'][1], st.session_state['pickup'][0]],
+                [st.session_state['dropoff'][1], st.session_state['dropoff'][0]]
+            ]
+        }])
 
-    st_data = st_folium(m)
+        line_layer = pdk.Layer(
+            "PathLayer",
+            data=line_data,
+            get_path="path",
+            get_color=[0, 0, 255, 255],
+            width_scale=20,
+            width_min_pixels=2
+        )
+        layers.append(line_layer)
+
+    # Center View
+    if points:
+        avg_lat = sum(float(p['lat']) for p in points) / len(points)
+        avg_lon = sum(float(p['lon']) for p in points) / len(points)
+    else:
+        avg_lat, avg_lon = 40.7128, -74.0060  # Default to NYC
+
+    view_state = pdk.ViewState(latitude=avg_lat, longitude=avg_lon, zoom=10)
+
+    # Render Map
+    st.pydeck_chart(pdk.Deck(
+        layers=layers,
+        initial_view_state=view_state,
+        tooltip={"text": "{type}"}
+    ))
 
 st.markdown(f'#### 30 Day Price Comparison for rides at {datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M %p")}')
 if fare_now != None:
