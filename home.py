@@ -102,29 +102,50 @@ with header_1:
 with header_2:
     # Weather information
 
-    with st.container(border = True):
-        st.markdown("### Current NYC Weather")
+    with st.container(border = True, height = 300):
+
         response_weather = get_weather_data()
+        temp_c = response_weather['current']['temp_c']
+        temp_f = response_weather['current']['temp_f']
 
-        col1_bis, col2_bis, col3_bis = st.columns(3)
-        with col1_bis:
-            temp_c = response_weather['current']['temp_c']
-            temp_f = response_weather['current']['temp_f']
-            st.markdown(f"#### {temp_c}°C")
-            st.markdown(f"#### {temp_f}°F")
+        wind_mph = response_weather['current']['wind_mph']
+        precip_in = response_weather['current']['precip_in'] # not using this one but why not add it one day
+        uv_index = round(response_weather['current']['uv'])
 
-        with col2_bis:
-            icon = "https:"+response_weather['current']['condition']['icon']
-            st.image(icon)
-            st.text(response_weather['current']['condition']['text'])
 
-        with col3_bis:
-            wind_mph = response_weather['current']['wind_mph']
-            precip_in = response_weather['current']['precip_in']
-            uv_index = round(response_weather['current']['uv'])
-            st.text(f"Wind: {wind_mph} m/h")
-            st.text(f"Precipitation: {precip_in} inches")
-            st.text(f"UV Index: {uv_index}")
+
+        title, icon_bar, description = st.columns([3,1,1])
+        title.markdown("#### Current NYC Weather")
+        icon = "https:"+response_weather['current']['condition']['icon']
+        icon_bar.image(icon)
+        description.markdown("")
+        description.markdown(response_weather['current']['condition']['text'])
+
+        a,b = st.columns(2)
+        c,d = st.columns(2)
+        st.markdown("""
+            <style>
+            [data-testid="stMetricValue"] {
+                font-size: 1.2rem;
+            }
+            [data-testid="stMetricLabel"] {
+                font-size: 0.8rem;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+        a.metric("Temp °C", temp_c, border=True)
+        b.metric("Temp °F", temp_f, border=True)
+
+        c.metric("Wind", f"{wind_mph} m/h", border=True)
+        d.metric("UV Index", f"{uv_index}", border=True)
+
+
+        # with col2_bis:
+
+
+
+
+
 
 col1, col2= st.columns(2)
 with col1:
