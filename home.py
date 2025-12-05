@@ -12,7 +12,6 @@ import pydeck as pdk
 from pathlib import Path
 # Setting the map in the background
 
-st.title(":taxi: need a wagon?:taxi:")
 
 @st.cache_data(ttl=3600)
 def get_lat_long(address):
@@ -78,18 +77,33 @@ if 'pickup' not in st.session_state:
     st.session_state['pickup'] = None
 if 'dropoff' not in st.session_state:
     st.session_state['dropoff'] = None
+# if "pickup_latitude" not in st.session_state:
+#     st.session_state['pickup_latitude'] = None
+# if "pickup_longitude" not in st.session_state:
+#     st.session_state['pickup_longitude'] = None
+# if "dropoff_latitude" not in st.session_state:
+#     st.session_state['dropoff_latitude'] = None
+# if "dropoff_longitude" not in st.session_state:
+#     st.session_state['dropoff_longitude'] = None
 pickup_latitude = None
 pickup_longitude = None
 dropoff_latitude = None
 dropoff_longitude = None
-fare_now = None
 
-col1, col2= st.columns(2)
-with col1:
+if "fare_now" not in st.session_state:
+    st.session_state["fare_now"] = None
 
-        ## Current Weather Display
-    st.markdown("### Current NYC Weather")
+
+header_1,_, header_2 = st.columns([2,1,3], vertical_alignment="center")
+with header_1:
+    st.title(":taxi: need a wagon?:taxi:")
+
+
+with header_2:
+    # Weather information
+
     with st.container(border = True):
+        st.markdown("### Current NYC Weather")
         response_weather = get_weather_data()
 
         col1_bis, col2_bis, col3_bis = st.columns(3)
@@ -112,35 +126,39 @@ with col1:
             st.text(f"Precipitation: {precip_in} inches")
             st.text(f"UV Index: {uv_index}")
 
+col1, col2= st.columns(2)
+with col1:
+
 
     ## Fare display
     st.markdown("### Fare Prediction")
     with st.container(border = True):
-        pickup = st.text_input("Where are you ?", placeholder="Manhattan")
-        if pickup:
-            pickup_latitude, pickup_longitude = get_lat_long(pickup)
-            st.session_state['pickup'] = (pickup_latitude, pickup_longitude)
-        dropoff = st.text_input("Where do you want to go ?", placeholder="Brooklyn")
-        if dropoff:
-            dropoff_latitude, dropoff_longitude = get_lat_long(dropoff)
-            st.session_state['dropoff'] = (dropoff_latitude, dropoff_longitude)
-        passenger_count = st.number_input("How many are you ?", min_value = 1, max_value = 5,
-                        step = 1, placeholder=1)
-
-
-
-
-        if pickup_longitude != None and dropoff_longitude != None:
-            pickup_datetime = datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
-            if st.button("Get Fare"):
-                fare_now = round(get_fare_prediction(pickup_datetime=pickup_datetime,
+        with st.form("details", border = False, enter_to_submit=False):
+            pickup = st.text_input("Where are you ?", placeholder="Manhattan")
+            if pickup:
+                pickup_latitude, pickup_longitude = get_lat_long(pickup)
+                st.session_state['pickup'] = (pickup_latitude, pickup_longitude)
+            dropoff = st.text_input("Where do you want to go ?", placeholder="Brooklyn")
+            if dropoff:
+                dropoff_latitude, dropoff_longitude = get_lat_long(dropoff)
+                st.session_state['dropoff'] = (dropoff_latitude, dropoff_longitude)
+            passenger_count = st.number_input("How many are you ?", min_value = 1, max_value = 5,
+                            step = 1, placeholder=1)
+            submitted = st.form_submit_button("Get Fare")
+            if submitted:
+                if pickup_longitude != None and dropoff_longitude != None:
+                    pickup_datetime = datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
+                    st.session_state.fare_now = round(get_fare_prediction(pickup_datetime=pickup_datetime,
                                 pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
                                 dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
                                 passenger_count=passenger_count), 2)
-                st.markdown(f"#### Predicted fare: {fare_now}$")
+                    st.markdown(f"#### Predicted fare: {st.session_state.fare_now}$")
+
 
 
 with col2:
+
+
     # Build points data dynamically
     points = []
     if st.session_state['pickup']:
@@ -204,17 +222,18 @@ with col2:
     st.pydeck_chart(pdk.Deck(
         layers=layers,
         initial_view_state=view_state,
-        tooltip={"text": "{type}"}
+        tooltip={"text": "{type}"},
+        height = 150
     ))
 
 st.markdown(f'#### 30 Day Price Comparison for rides at {datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M %p")}')
-if fare_now != None:
-
-
+button = st.button("Get Comparison")
+if button and st.session_state['fare_now'] != None:
+    pickup_datetime = datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
 
     df_fares = get_30_day_fare_prediction(pickup_datetime=pickup_datetime,
-                            pickup_longitude=pickup_longitude, pickup_latitude=pickup_latitude,
-                            dropoff_longitude=dropoff_longitude, dropoff_latitude=dropoff_latitude,
+                            pickup_latitude=st.session_state['pickup'][0], pickup_longitude=st.session_state['pickup'][1],
+                            dropoff_latitude=st.session_state['dropoff'][0], dropoff_longitude=st.session_state['dropoff'][1],
                             passenger_count=passenger_count)
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -242,3 +261,6 @@ if fare_now != None:
     fig.update_layout(xaxis=dict(showgrid = False, tickangle=45),
                           yaxis= dict(showgrid=True, gridcolor="lightgrey"))
     st.plotly_chart(fig)
+
+elif button:
+    st.write("Please input information")
