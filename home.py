@@ -10,7 +10,12 @@ import numpy as np
 from zoneinfo import ZoneInfo
 import pydeck as pdk
 from pathlib import Path
-# Setting the map in the background
+
+def local_css(file_name):
+    with open(file_name) as f:
+        st.markdown('<style>{}</style>'.format(f.read()), unsafe_allow_html=True)
+
+local_css("style/style.css")
 
 
 @st.cache_data(ttl=3600)
@@ -94,56 +99,45 @@ if "fare_now" not in st.session_state:
     st.session_state["fare_now"] = None
 
 
-header_1,_, header_2 = st.columns([2,1,3], vertical_alignment="center")
-with header_1:
-    st.title(":taxi: need a wagon?:taxi:")
+st.title(":taxi: need a wagon? :taxi:")
 
+# Weather section
+with st.container():
+    st.markdown('<div class="weather-container">', unsafe_allow_html=True)
 
-with header_2:
-    # Weather information
+    response_weather = get_weather_data()
+    temp_c = response_weather['current']['temp_c']
+    temp_f = response_weather['current']['temp_f']
+    wind_mph = response_weather['current']['wind_mph']
+    uv_index = round(response_weather['current']['uv'])
 
-    with st.container(border = True, height = 300):
+    # Compact weather display
+    weather_cols = st.columns([1, 3, 2, 2, 2, 2])
 
-        response_weather = get_weather_data()
-        temp_c = response_weather['current']['temp_c']
-        temp_f = response_weather['current']['temp_f']
+    icon = "https:" + response_weather['current']['condition']['icon']
+    weather_cols[0].image(icon, width=50)
+    weather_cols[1].markdown(f"**NYC Weather**  \n{response_weather['current']['condition']['text']}")
 
-        wind_mph = response_weather['current']['wind_mph']
-        precip_in = response_weather['current']['precip_in'] # not using this one but why not add it one day
-        uv_index = round(response_weather['current']['uv'])
+    # Smaller metrics
+    st.markdown("""
+        <style>
+        .weather-container [data-testid="stMetricValue"] {
+            font-size: 0.9rem;
+        }
+        .weather-container [data-testid="stMetricLabel"] {
+            font-size: 0.7rem;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
+    weather_cols[2].metric("°C", temp_c)
+    weather_cols[3].metric("°F", temp_f)
+    weather_cols[4].metric("Wind", f"{wind_mph} m/h")
+    weather_cols[5].metric("UV", f"{uv_index}")
 
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        title, icon_bar, description = st.columns([3,1,1])
-        title.markdown("#### Current NYC Weather")
-        icon = "https:"+response_weather['current']['condition']['icon']
-        icon_bar.image(icon)
-        description.markdown("")
-        description.markdown(response_weather['current']['condition']['text'])
-
-        a,b = st.columns(2)
-        c,d = st.columns(2)
-        st.markdown("""
-            <style>
-            [data-testid="stMetricValue"] {
-                font-size: 1.2rem;
-            }
-            [data-testid="stMetricLabel"] {
-                font-size: 0.8rem;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-        a.metric("Temp °C", temp_c, border=True)
-        b.metric("Temp °F", temp_f, border=True)
-
-        c.metric("Wind", f"{wind_mph} m/h", border=True)
-        d.metric("UV Index", f"{uv_index}", border=True)
-
-
-        # with col2_bis:
-
-
-
+st.markdown("---")
 
 
 
@@ -156,17 +150,15 @@ with col1:
     with st.container(border = True):
         with st.form("details", border = False, enter_to_submit=False):
             pickup = st.text_input("Where are you ?", placeholder="Manhattan")
-            if pickup:
-                pickup_latitude, pickup_longitude = get_lat_long(pickup)
-                st.session_state['pickup'] = (pickup_latitude, pickup_longitude)
             dropoff = st.text_input("Where do you want to go ?", placeholder="Brooklyn")
-            if dropoff:
-                dropoff_latitude, dropoff_longitude = get_lat_long(dropoff)
-                st.session_state['dropoff'] = (dropoff_latitude, dropoff_longitude)
             passenger_count = st.number_input("How many are you ?", min_value = 1, max_value = 5,
                             step = 1, placeholder=1)
             submitted = st.form_submit_button("Get Fare")
             if submitted:
+                pickup_latitude, pickup_longitude = get_lat_long(pickup)
+                st.session_state['pickup'] = (pickup_latitude, pickup_longitude)
+                dropoff_latitude, dropoff_longitude = get_lat_long(dropoff)
+                st.session_state['dropoff'] = (dropoff_latitude, dropoff_longitude)
                 if pickup_longitude != None and dropoff_longitude != None:
                     pickup_datetime = datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
                     st.session_state.fare_now = round(get_fare_prediction(pickup_datetime=pickup_datetime,
@@ -247,41 +239,41 @@ with col2:
         height = 150
     ))
 
-st.markdown(f'#### 30 Day Price Comparison for rides at {datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M %p")}')
-button = st.button("Get Comparison")
-if button and st.session_state['fare_now'] != None:
-    pickup_datetime = datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
+# st.markdown(f'#### 30 Day Price Comparison for rides at {datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M %p")}')
+# button = st.button("Get Comparison")
+# if button and st.session_state['fare_now'] != None:
+#     pickup_datetime = datetime.datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
 
-    df_fares = get_30_day_fare_prediction(pickup_datetime=pickup_datetime,
-                            pickup_latitude=st.session_state['pickup'][0], pickup_longitude=st.session_state['pickup'][1],
-                            dropoff_latitude=st.session_state['dropoff'][0], dropoff_longitude=st.session_state['dropoff'][1],
-                            passenger_count=passenger_count)
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-            x = df_fares.index,
-            y = df_fares['Fare Amount ($)'],
-            mode = 'lines+markers',
-            marker = dict(size = 8, color = "#ffc25a"),
-            line = dict(color = "#6AE7FF", width = 2),
-            showlegend=False,
-            hovertext= df_fares.reset_index().apply(lambda row: f"Fare Amout ($): {round(row['Fare Amount ($)'],2)}\nDate {row['Dates']}", axis = 1),
-            hovertemplate='%{hovertext}<extra></extra>'
-        ))
-        ## ymin fill
-    min_fill = df_fares['Fare Amount ($)'].min()
+#     df_fares = get_30_day_fare_prediction(pickup_datetime=pickup_datetime,
+#                             pickup_latitude=st.session_state['pickup'][0], pickup_longitude=st.session_state['pickup'][1],
+#                             dropoff_latitude=st.session_state['dropoff'][0], dropoff_longitude=st.session_state['dropoff'][1],
+#                             passenger_count=passenger_count)
+#     fig = go.Figure()
+#     fig.add_trace(go.Scatter(
+#             x = df_fares.index,
+#             y = df_fares['Fare Amount ($)'],
+#             mode = 'lines+markers',
+#             marker = dict(size = 8, color = "#ffc25a"),
+#             line = dict(color = "#6AE7FF", width = 2),
+#             showlegend=False,
+#             hovertext= df_fares.reset_index().apply(lambda row: f"Fare Amout ($): {round(row['Fare Amount ($)'],2)}\nDate {row['Dates']}", axis = 1),
+#             hovertemplate='%{hovertext}<extra></extra>'
+#         ))
+#         ## ymin fill
+#     min_fill = df_fares['Fare Amount ($)'].min()
 
-    fig.add_trace(go.Scatter(
-            x = df_fares.index,
-            y = [min_fill] * len(df_fares),
-            mode = "lines",
-            fill= "tonexty",
-            line = dict(color = "lightblue", width = 0),
-            showlegend= False,
-            hoverinfo="skip"
-        ))
-    fig.update_layout(xaxis=dict(showgrid = False, tickangle=45),
-                          yaxis= dict(showgrid=True, gridcolor="lightgrey"))
-    st.plotly_chart(fig)
+#     fig.add_trace(go.Scatter(
+#             x = df_fares.index,
+#             y = [min_fill] * len(df_fares),
+#             mode = "lines",
+#             fill= "tonexty",
+#             line = dict(color = "lightblue", width = 0),
+#             showlegend= False,
+#             hoverinfo="skip"
+#         ))
+#     fig.update_layout(xaxis=dict(showgrid = False, tickangle=45),
+#                           yaxis= dict(showgrid=True, gridcolor="lightgrey"))
+#     st.plotly_chart(fig)
 
-elif button:
-    st.write("Please input information")
+# elif button:
+#     st.write("Please input information")
